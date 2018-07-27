@@ -1,0 +1,334 @@
+---
+title: "CSS"
+author: "Colleen Nell"
+date: "12/5/2017"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.width = 6, cache=TRUE)
+
+setwd("/Users/colleennell/Dropbox/Projects/CSS exclusion/")
+
+library(devtools)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(cowplot)
+library(tidyr)
+library(vegan)
+
+source('/Users/colleennell/Dropbox/rstats/themes/theme_nell.R')
+
+se<-function(x) sd(x, na.rm=TRUE)/sqrt(length(x))
+
+```  
+Methods: These data are from a field experiment conducted at the former IRC seed farm in Irvine from Feb 2014-June 2014. For 9 plant species, a treatment of bird exclusion netting was applied to 8 experimental plants, paired with 5 control plants with no exclusion netting. After 3 months, the arthropods on the plants were sampled using vaccuum collection and identified to order or subgrouping to determine trophic feeding group. In addition, experimental plants were measured for their size and complexity, as well as host platn quality in a laboratory feeding assay of Spodoptera exigua.  
+
+Questions:  
+Does arthropod density (in exclusion) relate to HPQ? complexity?  
+Does Indirect defense (LRR) related to direct defenses (HPQ & density in exclusion)? Complexity?    
+Does community composition differ with bird effects? (permanova composition, exclusion vs not)  
+What arthropod Orders are consumed by birds?  
+Does bird feeding alter the average size of herbivores?  
+
+```{r}
+sizes<-read.csv('/data/2017/CSS_arth_sizes.csv')%>%dplyr::select(-L_S, -abundance, -orig.x)%>%melt(id.vars=c('species','Sample','treat','Order','feed'))##insect sorting data
+size.long<-sizes[rep(seq_len(nrow(sizes)), times=sizes$value),]%>%
+  dplyr::select(-value)%>%
+  left_join(read.csv('/data/2017CSS_avg_arth.csv'), by=c('Order'='ord', 'variable'='size'))
+size.long$size_mm<-ceiling(2*rnorm(length(size.long$species), mean=size.long$mean, sd=size.long$sd))/2
+size.long$size_mm<-ifelse(size.long$size_mm<1 & size.long$variable =='L', 3, ifelse(size.long$size_mm <1 &size.long$variable=='S', .5, size.long$size_mm))
+size.long<-size.long%>%dplyr::select(-mean, -sd)
+
+```  
+### Calculate arthropod biomass  
+Using measured arthropod lengths and Hodar's equation at the order-level  
+```{r}
+sizes<-read.csv('/Users/colleennell/Dropbox/Projects/CSS exclusion/data/2017CSS18_arth_size.csv')%>%dplyr::select(-variable)
+arth_b<-read.csv('/Users/colleennell/Dropbox/Projects/CAWR/CAWR_arth/data/cawr_arth_biomass.csv')%>%dplyr::select(Order,a,b,bar)
+levels(arth_b$Order)<-c('ACAR','ARAN','ARCH','AUCH','CHIL','COLE','DERM','DIPT','ENTO','HEMI','HETE','HYME','ISOP','LEPI',
+                        'MANT','NEUR','OPIL','PHAL','ORTH','PSEU','PSOC','RAPH','SIPH','STER','THYS','THYSA')
+arth_b$Order<-as.character(arth_b$Order)
+sizes$bm_name<-ifelse(sizes$Order == 'COCC', 'COLE', ifelse(sizes$Order == 'MIRID','HETE', ifelse(sizes$Order == 'ARCH', 'THYS', as.character(sizes$Order))))
+#write.csv(size.long, 'final/CSS18_arth_size.csv', row.names=FALSE)
+length(unique(sizes$Order))
+##calculate biomass - Hodar Equation: W=aBL^b
+sized<-sizes%>%left_join(arth_b%>%dplyr::select(-bar), by=c('bm_name'='Order'))%>%
+  mutate(biomass = (a*size_mm^b))%>%mutate(feed=tolower(feed))
+
+write.csv(sized, '/data/2017/CSS18_arth_biomass.csv', row.names=FALSE)
+```  
+### Arthropod composition  
+```{r}
+str(sized)
+
+#for each plant, the % of each order - individuals
+ord.mat<-sized%>%dcast(species+Sample+treat~Order)#%>%
+ord.mat$total<-rowSums(ord.mat%>%dplyr::select(ACAR:THYS))
+ord.rel<-ord.mat%>%
+  mutate_at(vars(ACAR:THYS), funs(./total))%>%
+  mutate(hemi = HETE+AUCH+STER)%>%
+  melt(id.vars=c('species','Sample','treat'))%>%
+  group_by(variable)%>%
+  summarize(mean=mean(value), se=se(value))
+
+ggplot(ord.rel%>%filter(variable !='total'), aes(variable, mean))+
+  geom_point()+
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se))+
+  theme(axis.text.x=element_text(angle=90))
+
+ORD.SIM<-simper(ord.mat%>%dplyr::select(ACAR:THYS), ord.mat$treat, permutations=100)
+summary(ORD.SIM)
+##control and exclusion treatments differ by AUCH, COLE, STER, HETE
+#sg - ARAN
+#arthropod communities in bird exclusion treatment had more spiders (simper p = 0.0297)
+```
+### Arthropod density   
+Total biomass per plant:  
+```{r}
+##total arthropo biomass on each plant
+arth.plant<-sized%>%group_by(species, Sample, treat)%>%
+  summarize(mg=sum(biomass, na.rm=TRUE), abun=length(biomass))
+
+ggplot(arth.plant, aes(reorder(Sample, mg), mg))+
+  geom_point(aes(color=treat))+
+  facet_wrap(~species, scales='free_x')+
+  theme(axis.text.x=element_text(angle=90, size=10))+
+  labs(x='')
+```  
+Total abundance per plant:
+```{r}
+ggplot(arth.plant, aes(reorder(Sample, abun), abun))+
+  geom_point(aes(color=treat))+
+  facet_wrap(~species, scales='free_x')+
+  theme(axis.text.x=element_text(angle=90, size=10))+
+  labs(x='')
+```  
+
+```{r}
+##proportion of herbivores vs predators
+feed.df<-sized%>%group_by(species, Sample, treat, feed)%>%
+  summarize(abun=length(biomass), mg=sum(biomass, na.rm=TRUE))%>%
+  melt(id.vars=c('species','Sample','treat','feed'), variable.name='metric')%>%
+  dcast(species+Sample+treat+metric~feed)
+feed.mat<-feed.df%>%dplyr::select(pred,herb,omni)
+feed.df$total=rowSums(feed.mat, na.rm=TRUE)
+
+##proportion predators for each species
+feed<-feed.df%>%
+  group_by(species, metric)%>%
+  summarize_at(vars(pred, herb, omni, total), funs(sum(., na.rm=TRUE)))%>%
+  mutate(pred_p=pred/total)#%>%
+  #summarize(mean_pred_p=mean(pred_p, na.rm=TRUE))
+  
+##proportion predators for each plant
+feed.plant<-feed.df%>%
+  group_by(species, Sample, treat, metric)%>%
+  summarize_at(vars(pred, herb, omni, total), funs(sum(., na.rm=TRUE)))%>%
+  mutate(pred_p=pred/total, herb_p=(herb+omni)/total)#%>%
+  #summarize(mean_pred_p=mean(pred_p, na.rm=TRUE))
+
+
+```  
+Convert to arthropod density: 
+```{r}
+methods<-read.csv('data/2017/CSS18_plants.csv')%>%dplyr::select(species:treat, sample_g:complexity)#total abun, plant wt, vac time
+methods$vac_sec<-sapply(strsplit(as.character(methods$vaccum), ':'), ##convert time to min & secs
+       function(x){
+         x<-as.numeric(x)
+         x[1]*60+x[2]})
+methods$vac_min<-methods$vac_sec/60
+
+##insect abundance and biomass per plant
+arth_abun<-feed.plant%>%
+  dplyr::select(-herb_p, -pred_p)%>%
+  melt(id.vars=c('Sample','species','treat','metric'))%>%
+  dcast(species+Sample+treat~variable+metric)%>%
+  left_join(methods, by=c('Sample','species','treat'))
+#str(methods)
+write.csv(arth_abun, 'data/2017/CSS18_plants.csv', row.names=FALSE)
+
+```
+```{r}
+#arths<-read.csv('final/CSS18_plants.csv')#total arthropods plus measurements for complexity, bees, volume, plant wt vacuum time. 
+arths<-arth_abun
+##arthropod density
+arth_dens<-arths%>%
+  mutate(herbo_mg=herb_mg+omni_mg, herbo_abun=herb_abun+omni_abun)%>%
+  dplyr::select(-omni_mg, -omni_abun)%>%
+  mutate_at(vars(herbo_abun, herb_abun, pred_abun, total_abun, herbo_mg, herb_mg, pred_mg, total_mg), funs(./plant_g))
+
+#write.csv(arth_dens, 'CSS18_ath_dens.csv', row.names=FALSE)
+
+dens_melt<-arth_dens%>%dplyr::select(-sample_g:-complexity)%>%
+  melt(id.vars=c('Sample','treat','species'))%>%
+  separate(variable, c('feed','metric'), '_')
+dens_melt$value<-ifelse(is.na(dens_melt$value), 0, dens_melt$value)
+
+#arthropod densities
+ggplot(dens_melt%>%filter(feed !='omni'), aes(species,value, color=treat))+
+  geom_point()+facet_wrap(~metric+feed, scales='free')
+
+##does herbivore density affectsed by species, treatment, plant size?
+dens.aov<-glm(log(1+herbo_mg)~treat*species, data=arth_dens, family='poisson', weights=plant_g)
+Anova(dens.aov, type='III')
+shapiro.test(resid(dens.aov))
+plot(resid(dens.aov))
+
+##fit distribution
+library(fitdistrplus)
+
+library(logspline)
+arty<-arth_dens%>%filter(Sample != 'SAME8')
+
+descdist(log(arty$herbo_mg+1), discrete=FALSE)
+
+fit.wei<-fitdist(arty$herbo_mg, 'weibull')
+fit.norm<-fitdist(arty$herbo_mg, 'norm')
+
+plot(fit.norm)
+plot(fit.wei)
+
+fit.wei$aic
+fit.norm$aic
+
+```  
+```{r}
+##arthropod density by species, treatment
+##mean herb dens by species, treat
+dens_sp<-arth_dens%>%
+  group_by(species, treat)%>%
+  summarize_at(vars(pred_abun:total_mg, complexity:herbo_abun), funs(mean(., na.rm=TRUE), se))
+
+#herbivore density
+ggplot(dens_sp, aes(species, herbo_mg_mean))+
+  geom_errorbar(aes(ymin=herbo_mg_mean-herbo_mg_se, ymax=herbo_mg_mean+herbo_mg_se), width=.3)+
+  geom_point(aes(color=treat))+
+  labs(y='Herbivore density\n(herbivore biomass/plant biomass)')
+```
+```{r}
+#herbivore abun
+ggplot(dens_sp, aes(species, herbo_abun_mean))+
+  geom_errorbar(aes(ymin=herbo_abun_mean-herbo_abun_se, ymax=herbo_abun_mean+herbo_abun_se), width=.3)+
+  geom_point(aes(color=treat))+
+  labs(y='Herbivore density\n(# herbivores/plant biomass')
+```
+### Bird effects - indirect defense  
+
+```{r}
+####################################################
+##indirect defense by birds
+library(metafor)
+
+## LRR = log(exclusion/control)
+arth.lrr<-dens_plant%>%dplyr::select(species, treat, mg_mean, mg_sd, mg_n)%>%
+  melt(id.vars=c('species','treat'))%>%dcast(species~treat+variable)
+#View(arth.lrr)
+
+bird.lrr<-escalc('ROM', m1i=C_mg_mean, m2i=T_mg_mean, sd1i=C_mg_sd, sd2i=T_mg_sd, n1i=C_mg_n, n2i=T_mg_n, data=arth.lrr, append=TRUE, var.names=c('LRR','LRR_var'))
+bird.ci<-summary(bird.lrr)
+
+##with se
+ggplot(bird.ci, aes(x=species, y=LRR))+geom_point()+geom_hline(yintercept=0, lty='dashed')+
+  geom_errorbar(aes(ymin=LRR-LRR_var, ymax=LRR+LRR_var), width=0)
+```
+```{r}
+hpq<-read.csv('CSS_HPQ.csv')
+hpq_sp<-read.csv('CSS_HPQ_SP.csv')
+
+```  
+### Phylogeny  
+```{r, include=FALSE, eval=FALSE}
+library(taxize)
+
+##species names
+sps<-data.frame(genus = c('Artemisia','Artemisia','Encelia', 'Eriogonum','Salvia','Salvia', 'Ericameria','Isocoma','Lupinus'),
+                sp = c('californica','douglasiana','californica','fasciculatum','apiana','mellifera','palmeri','menziesii','albifrons'))%>%
+  mutate(full = paste(genus, sp))
+name_resolve<-gnr_resolve(names=sps$full)
+str(name_resolve)
+unique(name_resolve$matched_name)
+summary(name_resolve$score)
+
+#retrieve higher taxonomic names
+classify<-classification(sps$full, db='ncbi')
+str(classify)
+classify$`Artemisia californica`
+
+spf<-classification(sps$full, get='family', db='ncbi')
+spf
+#order, family, subfamily, tribe, genus, species
+length(spf)
+
+arca<-spf[[1]]%>%filter(rank %in% c('order','family','subfamily','tribe','genus','species'))
+str(arca)
+arca$name[6]
+
+df.out<-NULL
+for (i in 1:length(spf)){
+  df<-spf[[i]]%>%filter(rank %in% c('order','family','subfamily','tribe','genus','species'))
+  named<-df$name[6]
+  df<-df%>%mutate(sps = paste(named))
+  df.out<-rbind(df, df.out)
+}
+write.csv(df.out, 'final/CSS_plant_class.csv', row.names=FALSE)
+
+cl.cast<-df.out%>%
+  dcast(sps~rank, value.var='name')
+write.csv(cl.cast, 'final/CSS_plant_class_cast.csv', row.names=FALSE)
+```
+
+```{r, include=FALSE, eval=FALSE}
+##build phylogeny
+library(brranching)
+
+#Artemisia californica
+#Artemisia douglasiana
+#Encelia californica
+#Ericameria palmeri
+#Eriogonum fasciculatum
+#Isocoma menziesii
+#Lupinus albifrons
+#Salvia apiana
+#Salvia mellifera
+
+phylogeny <- phylomatic(cl.cast$sps)
+phylogeny$tip.label <- taxize_capwords(phylogeny$tip.label, onlyfirst = TRUE)
+plot(phylogeny)
+
+library(ape)
+library(geiger)
+new<-'((((((((((((((((((((429205)INT63080)INT1861780)INT1110379)INT3615)INT3524,((((((((86309,1227621)INT4219)INT886714)INT102810,(((217972)INT71042,(147781)INT71058)INT877976)INT102809,(((183026)INT183025)INT102814)INT911341)INT102804)INT4210)INT4209)INT91882,((((((392646,392671)INT21880)INT216718)INT216706)INT4136)INT4143)INT91888)INT71274,(((((((49830)INT3869)INT163729)INT3814)INT3803)INT72025)INT91835)INT71275)INT1437201)INT91827)INT71240)INT1437183)INT3398)INT58024)INT78536)INT58023)INT3193)INT131221)INT35493)INT33090)INT2759)INT131567);'
+
+phylomatic(taxa=cl.cast$sps, storedtree='R20120829')
+##no branch lengths
+
+```  
+What proportion of arthropods were predators vs herbivores?  
+
+```{r}
+##arthropod by order, size
+orders<-read.csv('final/CSS_order.csv')#%>%
+  transform(value=as.numeric(value))%>%mutate(value=ifelse(is.na(value), 1, value))%>%
+  mutate(Order = ifelse(Order=='LEPID','LEPI', paste(Order)))%>%
+  left_join(read.csv('CSS_avg_arth.csv'), by=c('Order'='ord', 'size'))
+sum(orders$value, na.rm=TRUE)#2091 arthropods
+
+##expand df
+long.ord<-orders[rep(seq_len(nrow(orders)), times=orders$value),]%>%dplyr::select(-value)
+
+orders$size_mm<-ifelse(size == 'S', sample(c(1, 1.5, 2, 2.5, 2.9), size=1, prob=c(.2, .15, .2, .15, .3)),
+                       ifelse(size == 'L', sample()))
+
+arths<-read.csv('final/CSS_master_MAT.csv')
+arths[is.na(arths)]<-0
+arth.mat<-arths%>%dplyr::select(ACAR:WASP)
+
+```  
+
+```{r}
+avg.mm<-read.csv('CSS_avg_arth.csv')
+
+```  

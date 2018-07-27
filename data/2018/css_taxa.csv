@@ -1,0 +1,11 @@
+﻿species,code,TAXAID,FAMLY/GENUS/GENUS_SP,family,genus,TPL,sp_phy,GENUS_PHY
+Artemisia californica,ARCA,86309,asteraceae/artemesia/Artemisia_californica,asteraceae,artemisia,Artemisia californica Less.,N,Y
+Artemisia douglasiana,ARDO,,asteraceae/artemesia/Artemisia_douglasiana,asteraceae,artemisia,Artemisia douglasiana Besser ex Besser,N,Y
+Encelia californica,ENCA,,asteraceae/encelia/Encelia_californica,asteraceae,encelia,,Y,Y
+Eriogonum fasciculatum,ERFA,429205,polygonaceae/eriogonum/Eriogonum_fasciculatum,polygonaceae,eriogonum,Eriogonum fasciculatum Benth.,N,Y
+Ericameria palmeri,ERPA,,asteraceae/ericameria/Ericameria_palmeri,asteraceae,ericameria,,Y,Y
+Isocoma menziesii,ISME,,asteraceae/isocoma/Isocoma_menziesii,asteraceae,isocoma,,N,Y
+Lupinus albifrons,LUAL,,fabaceae/lupinus/Lupinus_albifrons,fabaceae,lupinus,,Y,Y
+Salvia apiana,SAAP,,lamiaceae/salvia/Salvia_apiana,lamiaceae,salvia,,Y,Y
+Salvia mellifera,SAME,,lamiaceae/salvia/Salvia_mellifera,lamiaceae,salvia,,Y,Y
+Stipa pulchra,OUT,,poaceae/stipa/Stipa_pulchra,poaceae,stipa,,N,Y

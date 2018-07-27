@@ -1,0 +1,269 @@
+---
+title: "CSS bird exclusion"
+output: html_notebook
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.width = 6, cache=TRUE)
+
+setwd("/Users/colleennell/Dropbox/Projects/CSS")
+
+library(devtools)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(cowplot)
+library(tidyr)
+library(vegan)
+
+source('/Users/colleennell/Dropbox/rstats/themes/theme_nell.R')
+
+se<-function(x) sd(x, na.rm=TRUE)/sqrt(length(x))
+
+```  
+
+```{r}
+
+sizes<-read.csv('CSS_sizes.csv')##arthropod broken up by size class and effort sorting?
+methods<-read.csv('CSS_methods.csv')
+arths<-read.csv('CSS_arths.csv') #total arthropods plus measurements for complexity, bees, volume, plant wt vacuum time. 
+orders<-read.csv('final/CSS_order.csv')%>%select(-contains('X'), -inits, -PLANT)
+
+hpq<-read.csv('CSS_HPQ.csv')
+hpq_sp<-read.csv('CSS_HPQ_SP.csv')
+
+```  
+Methods: These data are from a field experiment conducted at the former IRC seed farm in Irvine from Feb 2014-June 2014. For 9 plant species, a treatment of bird exclusion netting was applied to 8 experimental plants, paired with 5 control plants with no exclusion netting. After 3 months, the arthropods on the plants were sampled using vaccuum collection and identified to order or subgrouping to determine trophic feeding group. In addition, experimental plants were measured for their size and complexity, as well as host platn quality in a laboratory feeding assay of Spodoptera exigua.  
+
+Questions:  
+Does arthropod density (in exclusion) relate to HPQ? complexity?  
+Does Indirect defense (LRR) related to direct defenses (HPQ & density in exclusion)? Complexity?    
+Does community composition differ with bird effects? (permanova composition, exclusion vs not)  
+What arthropod Orders are consumed by birds?  
+Does bird feeding alter the average size of herbivores?  
+
+To do:  
+Arthropods density  
+Arthropod guild/functional group by order  
+Calculate LRR  
+PIC  
+Complexity - the number of intersections / total width OR  standard deviation of the length between intersections  
+
+```{r}
+size.melt<-sizes[-1,]%>%dplyr::select(SPECIES, Sample, treat, starts_with('X'))%>%dplyr::select(-X, -X.1, -X.2, -X.3, -X.4, -X.5, -X.6, -X.7)
+sum(sizes$ABUNDANCE, na.rm=TRUE)
+
+lg.size<-size.melt%>%select(SPECIES, Sample, treat, contains('.1'))%>%melt(id.vars=c('SPECIES','Sample','treat'))%>%mutate(size='large')
+sm.size<-size.melt%>%select(-contains('.1'))%>%melt(id.vars=c('SPECIES','Sample','treat'))%>%mutate(size='small')
+allsize<-rbind(lg.size, sm.size)
+
+##total abundance of arthropods by size
+all.total<-allsize%>%filter(SPECIES!='')%>%transform(value=as.numeric(value))%>%group_by(SPECIES, treat, size)%>%summarize(total = sum(value, na.rm=TRUE), mean = mean(value, na.rm=TRUE), se=se(value))
+
+##overall
+totes<-allsize%>%filter(SPECIES!='')%>%transform(value=as.numeric(value))%>%group_by(SPECIES, treat)%>%summarize(total = sum(value, na.rm=TRUE), mean = mean(value, na.rm=TRUE), se=se(value))
+
+ggplot(totes, aes(x=SPECIES, y= mean))+geom_bar(stat='identity', aes(fill=treat), position='dodge')+geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(.9), width=.1)
+
+sum(totes$total)
+##recorded 2176 total arthropods collected across 116 plants
+
+#116 plants, 8 speces
+
+#slides say 2650 arthropods?
+```
+
+
+Order ID data  
+116 plants, a total of 2176 arthropods  
+```{r}
+str(orders)
+
+sum(orders$value, na.rm=TRUE)
+##2091 arthropods- only 100 short from total counts
+
+##add grouping for treatment
+groupings<-sizes[-1,]%>%select(SPECIES, Sample, treat)%>%unique()
+groupings
+
+
+order.t<-full_join(orders, groupings, by='Sample')
+str(order.t)
+write.csv(order.t, 'CSS_arth_new.csv',row.names=FALSE)
+
+exp.d<-order.t%>%group_by(SP, treat, Sample)%>%summarize(n=length(unique(Sample)), total_abun = sum(abundance, na.rm=TRUE), ids = paste(unique(Sample), collapse =', '))
+
+##this one adds up as hoped
+ARTMAT<-read.csv('CSS_master_MAT.csv')
+ARTMAT[is.na(ARTMAT)]<-0
+gps<-ARTMAT%>%group_by(species, treat)%>%summarize(length(Sample))
+
+##community matrix
+mat<-ARTMAT%>%select(ACAR:WASP)
+mat.o<-ARTMAT%>%mutate(HYM = ANT+BEE+HYME+WASP, HEMI = AUCH+HETE+MIRID+STER, COL=COCC+COLE, abun=rowSums(mat, na.rm=TRUE))%>%select(-ANT, -BEE, -HYME, -AUCH, -HETE, -MIRID, -STER, -COCC, -COLE)
+
+#calcualte total abundance, plant size, density
+ath.d<-ARTMAT%>%mutate(plant_wt = WT_multiplier*WT_sample, abun=rowSums(mat, na.rm=TRUE), arth_dens=abun/plant_wt)
+#relative abundances
+arth.rel<-ath.d%>%select(ACAR:WASP, abun)%>%mutate_all(funs(./abun))%>%select(-abun)
+arth.rel[is.na(arth.rel)]<-0
+##densities
+arth.dens<-ath.d%>%select(ACAR:WASP, plant_wt)%>%mutate_all(funs(./plant_wt))%>%select(-plant_wt)
+arth.dens[is.na(arth.dens)]<-0
+dens.dist<-vegdist(arth.dens, method='bray')
+
+##does arthropod composition differ with bird feeding?
+arth.dist<-vegdist(arth.rel, method='jaccard')
+rel.comp<-adonis(arth.dist~treat*species, data=ath.d)
+rel.comp
+
+##arthropod composition differs by species, and treatment*species interaction but no main effect of treatment - this is using relative abundances
+arth.mds<-metaMDS(arth.dist, trymax=100, k=3)
+arth.mds
+plot(arth.mds)
+
+dens.comp<-adonis(dens.dist~treat*species, data=ath.d)
+dens.comp
+##similar result
+
+dens.mds<-metaMDS(dens.dist, trymax=100, k=2)
+dens.mds##do not converge
+
+ord.rel<-mat.o%>%select(ACAR:WASP, HYM, HEMI, COL, abun)%>%mutate_all(funs(./abun))%>%select(-abun)
+#ord.rel[is.na(ord.rel)]<-0
+ord.dist<-vegdist(ord.rel, method='bray')
+ord.comp<-adonis2(ord.dist~treat, data=ath.d, strata='species')
+ord.comp
+ord.mds<-monoMDS(ord.dist, trymax=100)
+ord.mds
+ord.df<-data.frame(ord.mds$points)%>%mutate(treat=ath.d$treat, sp = ath.d$species, dens = ath.d$arth_dens)
+
+ggplot(ord.df, aes(x=MDS1, y=MDS2))+geom_point(aes(color=sp, shape=treat, size=dens))
+
+a.cap<-capscale(ord.dist~Condition(species), data=ath.d, comm=arth.dens)
+head(summary(a.cap))
+plot(a.cap)
+pdf<-data.frame(scores(a.cap)$sites)%>%mutate(sp=ath.d$species, treat=ath.d$treat)
+
+ggplot(pdf, aes(x=MDS1, y=MDS2))+geom_point(aes(color=sp, shape=treat), size=3)
+```  
+
+Are there size differences in prey between treatments?  
+
+## Arthropod densities by bird exclusion treatment  
+
+```{r}
+arths<-read.csv('CSS_master_MAT.csv')
+str(arths)
+arth.mat<-arths%>%dplyr::select(ACAR:WASP)
+
+##calculate arthropod abundance, density, plant dry mass
+arths<-arths%>%
+  mutate(abun = rowSums(arth.mat, na.rm=TRUE),
+         plant_g = WT_multiplier*WT_sample,
+         dens = abun/plant_g)
+
+##average arthropod density by treatment, species
+arth.treat<-arths%>%
+  group_by(species, treat)%>%
+  summarize(dens_mean = mean(dens), dens_se = se(dens), abun_mean = mean(abun), abun_se = se(abun),
+            n_plant = length(unique(Sample)))
+
+##
+```
+```{r, fig.height=6, fig.width=6}
+##plot arthropod densities
+ggplot(arth.treat, aes(x=treat, y=dens_mean))+
+  geom_point()+
+  geom_errorbar(aes(ymin=dens_mean-dens_se, ymax=dens_mean+dens_se), width=.2)+
+  facet_wrap(~species)+
+  theme_nell()
+##densities differ on...ardo, enca, same, saap?
+
+```
+```{r}
+##abundance
+ggplot(arth.treat, aes(x=treat, y=abun_mean))+
+  geom_point()+
+  geom_errorbar(aes(ymin=abun_mean-abun_se, ymax=abun_mean+abun_se), width=.2)+
+  facet_wrap(~species)+
+  theme_nell()
+#abundance differs on ardo, enca, isme, lual, saap, same?
+#similar but more variation
+
+##use rarefaction to predict total abundance at equal sampling effort?
+##vacuum times are given, so are searching
+##rarefaction
+##for each species, treatment
+##extrapolate the total abundance based on vaccuum time
+##total density
+##vaccum time per plant volume?
+
+str(methods) ##this is missing 2 plants??
+
+##time to seconds
+#methods$vac<-strptime(as.character(methods$vaccum), format = '%M:%S')
+methods$vac_sec<-sapply(strsplit(as.character(methods$vaccum), ':'), 
+       function(x){
+         x<-as.numeric(x)
+         x[1]*60+x[2]})
+methods$vac_min<-methods$vac_sec/60
+
+##sampling effort per plant
+##plant volume/dry mass vaccumed per minute
+methods$vac_g_min<-methods$plant_wt/methods$vac_min
+methods$dens_g_min<-methods$abun/methods$vac_g_min
+write.csv(methods, 'final/CSS_methods.csv', row.names=FALSE)
+
+ggplot(methods, aes(x=vac_g_min, y=abun, color=treat))+geom_point()#+facet_wrap(~sp)
+##because plants were sampled in similar effort
+#plant dry wt is not related to total abundance?
+
+```
+```{r}
+methods<-read.csv('final/CSS_methods.csv')
+## go with composition weights and abundances
+str(methods)
+##bigger plants should have higher insect abundance
+##insect density is related to quality?
+
+##compare abundance to composition data
+meth<-methods%>%left_join(arths%>%dplyr::select(Sample, abun_comp = abun, plant_g), by=c('Sample'))%>%
+  dplyr::select(-plant_wt, -abun)%>%
+  mutate(plant_kg=plant_g/1000, min_g = vac_min/plant_kg, dens_min_g = (abun_comp/min_g)/plant_kg)
+write.csv(meth, 'final/CSS_methods_2017.csv', row.names=FALSE)
+
+
+```
+```{r}
+#density by trea,t sp
+dens<-meth%>%
+  group_by(sp, treat)%>%
+  summarize(mean = mean(dens_min_g, na.rm=TRUE), se=se(dens_min_g))
+
+ggplot(dens, aes(x=treat, y=mean, color=sp))+
+  geom_point()+
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.2)+
+  facet_wrap(~sp)
+
+gmin_aov<-aov(dens_min_g~sp*treat, data=meth)
+summary(gmin_aov)
+shapiro.test(resid(gmin_aov))
+
+## insects per g-1 min-1
+# insect densities differed by species, not treatment - variation in quality
+# 
+
+##determine pred/herb densities
+##add plant volume info
+
+
+new<-read.csv('')
+
+ggplot(methods)+geom_histogram(aes(x=dens_g_min))
+
+```  
+## Plant traits  
+
+

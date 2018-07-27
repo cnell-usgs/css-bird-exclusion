@@ -1,0 +1,71 @@
+---
+title: "plant complexity"
+author: "C. Nell"
+date: "7/27/2018"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    toc_depth: 4
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(tidy=TRUE,error = TRUE, eval = TRUE, message = FALSE, warning = FALSE,cache=TRUE, rows.print=5, cols.min.print=4)
+```
+
+```{r Load preliminary packages, include=FALSE}
+library(dplyr) ## for data wrangling - %>% function
+library(reshape2) ##melt and cast data
+library(tidyr) # 'separate' function
+library(readxl) #read xlsx files into r on mac computer
+library(vegan) # dissimilarity matrix, permanova functions
+library(tidyverse)
+library(stringr)
+library(ggplot2) # plotting
+library(magrittr)
+```  
+#### Data  
+```{r}
+oplant<-read.csv('data/2018/CSS_plant_data.csv')
+
+# complexity data
+plants<-read.csv('data/2018/CSS_comps.csv')%>%
+  group_by(species)%>%
+  dplyr::summarize(complex=mean(complexity/(3*diameter)), complex_se=se(complexity/(3*diameter)))
+plants
+```  
+
+#### Plant phylogeny  
+```{r}
+## S.PhyloMaker function to generate phylogeny for seed plants
+source("https://raw.githubusercontent.com/jinyizju/S.PhyloMaker/master/R_codes%20for%20S.PhyloMaker")
+# Citation: Qian, H. and Y. Jin. (2016) An updated megaphylogeny of plants, a tool for generating plant phylogenies and an analysis of phylogenetic community structure. Journal of Plant Ecology 9(2): 233–239.
+# uses PhytoPhylo species-level megaphylogeny as a backbone (Zanne et al 2014)
+
+phylo<-read.tree("data/trees/QianJin_2016.txt") # megaphylogeny from Qian & Jim 2016 "PhytoPhylo"
+nodes<-read.table('https://raw.githubusercontent.com/jinyizju/S.PhyloMaker/master/nodes', fill=TRUE, header=TRUE)# nodes for phylogeny
+
+sp.list<-read.csv('data/2018/css_taxa.csv')%>%
+  dplyr::select(species, genus, family)
+
+# artemisia species are not in megaphy, use representative taxa from subgenera for divergence
+new.sp.list<-sp.list%>%
+  mutate(species=ifelse(species == 'Artemisia californica', 'Artemisia tridentata', 
+                        ifelse(species == 'Artemisia douglasiana', 'Artemisia ludoviciana', paste(species))))
+result<-S.PhyloMaker(spList=new.sp.list, tree=phylo, nodes=nodes)# prune megaphy to species list
+phy<-result$Scenario.1%>%makeLabel()
+
+```  
+
+#### Intermediate predators : herbivores, IP:H  
+```{r}
+# ratio of predators to herbivores by plant species
+ph.df<-oplant%>%group_by(species, treat)%>%summarize(mean=mean(pred_herb, na.rm=TRUE), se=se(pred_herb))
+ggplot(ph.df, aes(treat, mean))+geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1)+geom_point()+facet_wrap(~species)
+mod<-aov(pred_herb~species*treat, data=oplant)
+
+Anova(mod, type='III')
+TukeyHSD(mod, 'treat')
+
+
+```

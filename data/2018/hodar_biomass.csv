@@ -1,0 +1,26 @@
+Class,Level,Taxa,Order,Common Names,ID,,a,b,Source
+Arachnida,ORDER,ACARINA,ACAR, Mites & Ticks,ACARINA - Mites & Ticks,,0.053,2.494,"Hodar, 1996"
+Arachnida,ORDER,ARANEAE,ARAN, Spiders,ARANEAE - Spiders,,0.1044,2.296,"Hodar, 1996"
+Arachnida,ORDER,OPILIONES or PHALANGIDA,OPIL, Daddy long-legs or Harvestmen,OPILIONES or PHALANGIDA - Daddy long-legs or Harvestmen,,0.0405,2.916,"Hodar, 1996"
+Insecta,ORDER,COLEOPTERA,COLE, Beetles,COLEOPTERA - Beetles,,0.041,2.64,"Hodar, 1996"
+Insecta,ORDER,DIPTERA,DIPT," Flies, includes gnats & mosquitoes","DIPTERA - Flies, includes gnats & mosquitoes",,0.0312,2.392,"Hodar, 1996"
+Colembolla,ORDER,ENTOMOBRYOMORPHA,ENTO, Springtails,ENTOMOBRYOMORPHA - Springtails,,0.0024,3.676,"Hodar, 1996"
+insecta,ORDER,HEMIPTERA,HEMI,sap-feeders,HEMIPTERA -,,0.049566667,2.255333333,
+insecta,SUBORDER,AUCHENORRHYNCHA,AUCH, Free-living Hemipterans,AUCHENORRHYNCHA - Free-living Hemipterans,,0.0548,2.354,"Hodar, 1996"
+insecta,SUBORDER,HETEROPTERA,HETE, The True Bugs,HETEROPTERA - The True Bugs,,0.0341,2.688,"Hodar, 1996"
+insecta,SUBORDER,STERNORRHYNCHA,STER, Plant-parasitic Hemipterans (includes aphids),STERNORRHYNCHA - Plant-parasitic Hemipterans (includes aphids),,0.0598,1.724,"Hodar, 1996"
+insecta,ORDER,HYMENOPTERA,HYME," Ants, Bees, & Wasps","HYMENOPTERA - Ants, Bees, & Wasps",,0.1636,1.9,"Hodar, 1996"
+insecta,ORDER,LEPIDOPTERA,LEPI," Butterflies & Moths, including larvae","LEPIDOPTERA - Butterflies & Moths, including larvae",,0.011,2.571,"Hodar, 1996"
+insecta,ORDER,ORTHOPTERA,ORTH," Grasshoppers, crickets, cockroaches","ORTHOPTERA - Grasshoppers, crickets, cockroaches",,0.0255,2.637,"Hodar, 1996"
+insecta,ORDER,PSOCOPTERA,PSOC, Barklice,PSOCOPTERA - Barklice,,0.0425,1.637,"Hodar, 1996"
+insecta,ORDER,THYSANOPTERA,THYS, Thrips,THYSANOPTERA - Thrips,,0.0071,2.537,"Hodar, 1996"
+insecta,ORDER,THYSANURA,THYA, Bristletails,THYSANURA - Bristletails,,0.0747,1.601,"Hodar, 1996"
+insecta,ORDER,DERMAPTERA,DERM, Earwigs,DERMAPTERA - Earwigs,,0.0015,3.497,"Hodar, 1996"
+insecta,ORDER,NEUROPTERA,NEUR, Lacewing,NEUROPTERA - Lacewing,,0.0814,1.53,"Hodar, 1996"
+insecta,ORDER,ISOPODA,ISOP,,,,0.0101,2.844,"Hodar, 1996"
+,ORDER,CHILOPODA,CHIL,,,,0.0036,2.626,"Hodar, 1996"
+,ORDER,MANTODEA,MANT,,,,0.0017,2.953,"Hodar, 1996"
+,ORDER,ARCHAEOGNATHA,ARCH,,,,,,
+,ORDER,SIPHONAPTERA,SIPH,,,,,,
+,ORDER,PSEUDOCROPIONIDA,PSEU,,,,,,
+,ORDER,RAPHIDOPTERA,RAPH,,,,,,

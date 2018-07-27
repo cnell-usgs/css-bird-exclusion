@@ -1,0 +1,236 @@
+---
+title: "CSS bird exclusion"
+author: "cnell"
+date: "April 4, 2016"
+output: html_document
+runtime: shiny
+---
+```{r,loadup,echo=T,warning=F, tidy=TRUE}
+
+library(ggplot2)
+library(dplyr)
+library(car)
+library(reshape2)
+library(knitr)
+setwd("/Users/colleennell/Documents/R/CSS/data")
+clean<-read.csv("CSS_matrix_cleaned.csv")
+feeding<-read.csv("CSS_feeding.csv")
+css<-read.csv("CSS_complexity.csv")
+
+
+std <- function(x) sd(x)/sqrt(length(x))
+```
+###Contents  
+1. Data Description  
+2. Arthropod density results
+    a. All arthropods by plant species, bird exclusion treatment
+    b. Same, just herbivores
+    c. Same, predators
+    d. Relationship of herbivores & predators  
+3. Arthropod community composition analyses  
+4. Indirect defense from birds
+<br>  
+
+###1. Data Description  
+These data are from a field experiment conducted at the former IRC seed farm in Irvine from Feb 2014-June 2014. For 9 plant species, a treatment of bird exclusion netting was applied to 8 experimental plants, paired with 5 control plants with no exclusion netting. After 3 months, the arthropods on the plants were sampled using vaccuum collection and identified to order or subgrouping to determine trophic feeding group. In addition, experimental plants were measured for their size and complexity, as well as host platn quality in a laboratory feeding assay of Spodoptera exigua.   
+
+![](figs/expd.png)
+
+
+###2. Arthropod density results
+Do herbivore communities differ among plant species?  
+**a.  Arthropod density (all)**
+
+```{r, echo=FALSE}
+clean$totalarths<-rowSums(clean[,2:22],na.rm=T)
+clean$WT_plant<-clean$WT_multiplier*clean$WT_sample
+clean$arth_dens<-(clean$totalarths/clean$WT_plant)*1000
+###arth dens by plant, treat
+cleanmean<-clean%>%
+  group_by(species,treat)%>%
+  summarize(meandens=mean(totalarths),sddens=sd(totalarths))
+
+###test herbivore density by species, treat
+Anova(lm(clean$arth_dens~clean$species+clean$treat),type="III")
+
+##species,treatment herbivore densities
+#generate means
+sptreatmean<-clean%>%
+  group_by(species,treat)%>%
+  summarize(arthmean=mean(arth_dens),arthse=std(arth_dens))
+densrank<-reorder(sptreatmean$species,sptreatmean$arthmean)
+sptreat<-ggplot(sptreatmean,aes(x=densrank,y=arthmean,group=treat,fill=treat))+
+  geom_bar(stat="identity",position=position_dodge())+
+  labs(x="Plant Species",y="Mean arthropod density",color="Treatment")+
+  geom_errorbar(aes(ymin=arthmean-arthse,ymax=arthmean+arthse),width=.2,position=position_dodge(.9))+
+  scale_fill_manual(values=c("#999999", "#E69F00"), 
+                       name="Treatment",
+                       breaks=c("C", "T"),
+                       labels=c("Birds", "No birds"))+
+  theme_minimal()
+sptreat
+##show means for species,treat
+sptreatmean
+
+```
+<br>  
+**b. Herbivore density**
+```{r,herbdens,warning=F, echo=F}
+###just the herbivores
+##transpose, replace ID groups with feeding, transpose back and summarize by feeding
+drop<-c("treat","species","WT_multiplier","WT_sample")
+herbs<-clean[,!(names(clean) %in% drop)]
+herbs =setNames(data.frame(t(herbs[,-1])),herbs[,1])#transpose df
+herbs<-cbind(ID = rownames(herbs),herbs)#fix rownames as column to merge with grouping variable
+rownames(herbs)<-NULL##merge with 'feeding' data to determine which are herbivores
+feeding<-feeding%>%
+  group_by(ID,feed)
+herbsfeedg<-right_join(feeding,herbs,by=c("ID"))
+herbsfeedg[is.na(herbsfeedg)]<-0
+feedtotal<-herbsfeedg%>%
+  group_by(feed)%>%
+  summarize_each(funs(sum),3:117)
+#transopse back to sample x taxa
+CSS_feed<-as.data.frame(t(feedtotal[,-1])) #transpose
+colnames(CSS_feed)<-feedtotal$feed#make grouping as col names
+CSS_feed<-cbind(ID = rownames(CSS_feed),CSS_feed) #make plant ID a column
+rownames(CSS_feed)<-NULL #remove rownames
+##create herb_total variable
+CSS_feed$herb_total<-CSS_feed$herb+CSS_feed$omni 
+CSS_feed$herb_dens<-CSS_feed$herb_total #this is not a density
+##merge with total herbs to compare
+clean$totalarths<-rowSums(clean[,2:22],na.rm=T)
+clean$WT_plant<-clean$WT_multiplier*clean$WT_sample
+clean$arth_dens<-(clean$totalarths/clean$WT_plant)*1000
+CSS_feed$Sample<-CSS_feed$ID
+
+
+
+
+```
+
+###3. Indirect defense by birds  
+####Bird effects = $\ log(\frac{control}{exclusion})$  
+**A negative value reflects arthropod removal by birds  
+
+```{r, echo=FALSE}
+##set up df for pooled se calculation + LRR
+sptreatmean<-clean%>%
+  group_by(species,treat)%>%
+  summarize(arthmean=mean(arth_dens),arthse=std(arth_dens),arthsd=sd(arth_dens),
+            n=length(arth_dens))
+forID<-dcast(sptreatmean,species~treat,value.var="arthmean")
+forID2<-dcast(sptreatmean,species~treat,value.var="arthsd")
+forIDn<-dcast(sptreatmean,species~treat,value.var="n")
+forID2$Csd<-forID2$C
+forID2$Tsd<-forID2$T
+forID<-left_join(forID,forID2,by="species")
+forIDn$Cn<-forIDn$C
+forIDn$Tn<-forIDn$T
+forID<-left_join(forID,forIDn,by="species")
+
+#bird effects
+forID$ID<-log(forID$C.x/forID$T.x) ##negative value reflects arthropod removal by birds
+forID$IDse<-(sqrt((forID$Csd)^2/(forID$Cn*forID$C.x)+(forID$Tsd)^2/(forID$Tn*forID$T.x)))/(forID$Tn+forID$Cn)
+
+##add to plot
+IDrank<-(reorder(forID$species,forID$ID))
+spID<-ggplot(forID,aes(x=IDrank,y=ID))+geom_point(size=3)+
+  labs(x="Plant Species",y="Bird Effects\nlog(Control/Bird exclusion)")+
+  scale_x_discrete(limits = rev(levels(IDrank)))+
+  geom_hline(yintercept=0,lty="dashed")+
+  geom_errorbar(aes(ymin=ID-IDse,ymax=ID+IDse),width=.2)+
+  theme_minimal()
+spID
+```
+<br>   
+
+**Direct vs Indirect Defense**   
+
+Direct defense = arthropod density in bird exclusion   
+To calculate LRR bird effects and direct defense both using the bird exclusion treatment and avoid spurrious correlation, 4 plants were randomly selected from the bird exclusion treatment of each plant species. These were assigned to be used exclusively for the LRR and the remaining plants to calculate mean arthropod density for Direct Defense. This was acheived using 'sample', and assigning 'group' variables (DD, ID, or C), saved in the "CSS_data_groups.csv" datasheet. This 'group' variable was then used to create a new df using 'dcast' in 'reshape2' to create separate columns for each 'group' category for each plant species to generate the means for arthropod density in control, bird exclusion, and to calculate LRR bird effects.  
+<br>  
+
+```{r,IDvsDD,echo=F}
+IDvsDD<-lm(ID~T.x,data=forID)
+summary(IDvsDD)
+pval<-(summary(IDvsDD)$coefficients[,4])
+rsq<-format(round(summary(IDvsDD)$r.squared, 2), nsmall = 3)##this is pulling the R2 value and limiting to 2 decimals
+rsq_label<-paste("R^2 ==",rsq)
+
+IDDD<-ggplot(forID,aes(x=T.x,y=ID))+geom_point(size=3)+
+  geom_text(aes(label=species),hjust=-.25,vjust=-.5)+
+  geom_errorbar(aes(ymin=ID-IDse,ymax=ID+IDse),width=.2)+geom_errorbarh(aes(xmin=T.x-Tsd,xmax=T.x+Tsd))+
+  geom_smooth(method="lm",se=F,color="grey")+theme_minimal()+
+  scale_linetype_manual(values = ifelse(pval<= 0.05,"solid",
+                                        ifelse(pval<=0.10 & pval>0.05,"dashed", "blank")))+
+  annotate("text",x=95,y=.3, label=rsq_label,parse=T)+labs(x="Herbivore density in exclusion",y="Bird Effects")
+IDDD
+
+```
+<br>  
+
+###4. Herbivore community composition   
+
+<br>  
+
+```{r,multivarth}
+
+
+
+```
+
+###5. Host Plant Quality  
+
+<br>  
+
+```{r,hpq,echo=F,warning=F}
+sprank<-reorder(css$Plant.ID,css$hpq)
+hpq.plot<-ggplot(css,aes(x=sprank,y=hpq))+geom_bar(stat="identity")+geom_errorbar(aes(ymin=hpq-hpq_se,ymax=hpq+hpq_se),width=.1)+labs(x="Plant Species",y="Caterpillar Growth")+theme_minimal()+theme(axis.text.x=element_text(angle=90,hjust=1))
+hpq.plot
+
+newy<-left_join(forID,css,by=c("species"="Plant.ID"))
+newy$hpq.log<-log(newy$hpq)
+newy$hpsse<-log(newy$hpq_se)
+newy[newy=="-Inf"]<-0
+lm2<-lm(newy$T.x~newy$hpq)
+summary(lm2)
+
+DDhpq<-ggplot(newy,aes(x=hpq,y=T.x))+geom_point(size=3)+theme_minimal()+labs(x="Caterpillar Growth",y="Herbivore Desnity in exclusion")+geom_errorbar(aes(ymin=T.x-Tsd,ymax=T.x+Tsd))+geom_errorbarh(aes(xmin=hpq-hpq_se,xmax=hpq+hpq_se))+geom_smooth(method="lm",se=F)
+DDhpq
+
+lm3<-lm(newy$ID~newy$hpq)
+summary(lm3)
+
+IDhpq<-ggplot(newy,aes(x=hpq,y=ID))+geom_point(size=3)+theme_minimal()+labs(x="Caterpillar Growth",y="Bird effects")+geom_errorbar(aes(ymin=ID-IDse,ymax=ID+IDse))+geom_errorbarh(aes(xmin=hpq-hpq_se,xmax=hpq+hpq_se))
+IDhpq
+```
+
+###6. Plant structural complexity  
+comp vs ID
+comp vs DD
+comp vs hpq
+<br>  
+**Complexity ~ HPQ**  
+This includes data collected on additional plant species + bird exclusion species, N= 16. These are only woody species.
+```{r,complex,echo=FALSE}
+css$hpq.log<-log(css$hpq)
+css[css=="-Inf"]<-0
+css$complexity<-css$comp2
+lm1<-lm(hpq~comp2,data=css)
+summary(lm1)
+
+pval<-(summary(lm1)$coefficients[,4])
+rsq<-format(round(summary(lm1)$r.squared, 2), nsmall = 3)##this is pulling the R2 value and limiting to 2 decimals
+rsq_label<-paste("R^2 ==",rsq)
+
+comp.plot<-ggplot(css,aes(x=complexity,y=hpq))+geom_point(size=4)+geom_smooth(method="lm",se=F,color="grey")+theme_minimal()+
+  geom_errorbar(aes(ymin=hpq-hpq_se,ymax=hpq+hpq_se))+geom_errorbarh(aes(xmin=complexity-comp_se2,xmax=complexity+comp_se2))+
+  labs(x="Complexity (Intersections/length)",y="Host Plant Quality (caterpillar wt gain)")+scale_linetype_manual(values = ifelse(pval<= 0.05,"solid",
+                                        ifelse(pval<=0.10 & pval>0.05,"dashed", "blank")))+
+  annotate("text",x=12,y=4, label=rsq_label,parse=T)
+comp.plot
+
+
+
+```
