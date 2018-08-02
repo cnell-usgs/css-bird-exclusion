@@ -17,11 +17,8 @@ knitr::opts_chunk$set(tidy=TRUE,error = TRUE, eval = TRUE, message = FALSE, warn
 library(dplyr) ## for data wrangling - %>% function
 library(reshape2) ##melt and cast data
 library(tidyr) # 'separate' function
-library(readxl) #read xlsx files into r on mac computer
 library(vegan) # dissimilarity matrix, permanova functions
 library(tidyverse)
-library(stringr)
-library(ggplot2) # plotting
 library(magrittr)
 ```  
 #### Data  
@@ -61,11 +58,30 @@ phy<-result$Scenario.1%>%makeLabel()
 ```{r}
 # ratio of predators to herbivores by plant species
 ph.df<-oplant%>%group_by(species, treat)%>%summarize(mean=mean(pred_herb, na.rm=TRUE), se=se(pred_herb))
-ggplot(ph.df, aes(treat, mean))+geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1)+geom_point()+facet_wrap(~species)
-mod<-aov(pred_herb~species*treat, data=oplant)
+ph.df
+
+ggplot(ph.df, aes(treat, mean))+
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1)+
+  geom_point()+
+  facet_wrap(~species)+
+  labs(x='Treatment, C = control, T = bird exclusion', y='IP:H')
+
+mod<-aov(pred_herb~treat, data=oplant)
+summary(mod)
 
 Anova(mod, type='III')
-TukeyHSD(mod, 'treat')
+TukeyHSD(mod)
+
+ph.cast<-ph.df%>%dcast(species~treat, value.var='mean')
+ph.cast
+
+ggplot(ph.cast, aes(C, `T`))+
+  geom_point(aes(color=species))+
+  geom_smooth(method='lm', se=F, color='black')+
+  geom_abline(slope=1, intercept=0, lty='dashed')+
+  ylim(0,.3)+xlim(0,.3)+
+  labs(y='Bird exclusion', x='Control')
 
 
+lm.mod<-lm()
 ```
