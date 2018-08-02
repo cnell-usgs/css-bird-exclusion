@@ -11,6 +11,8 @@ output:
 
 ```{r, include=FALSE}
 knitr::opts_chunk$set(tidy=TRUE,error = TRUE, eval = TRUE, message = FALSE, warning = FALSE,cache=TRUE, rows.print=5, cols.min.print=4)
+theme_set(theme_minimal())
+
 ```
 
 ```{r Load preliminary packages, include=FALSE}
@@ -20,6 +22,12 @@ library(tidyr) # 'separate' function
 library(vegan) # dissimilarity matrix, permanova functions
 library(tidyverse)
 library(magrittr)
+# phylogenies
+library(phytools)
+library(ape)
+library(geiger)
+
+se <- function(x) sqrt(var(x,na.rm=TRUE)/length(na.omit(x)))
 ```  
 #### Data  
 ```{r}
@@ -33,7 +41,7 @@ plants
 ```  
 
 #### Plant phylogeny  
-```{r}
+```{r, eval=FALSE, include=FALSE}
 ## S.PhyloMaker function to generate phylogeny for seed plants
 source("https://raw.githubusercontent.com/jinyizju/S.PhyloMaker/master/R_codes%20for%20S.PhyloMaker")
 # Citation: Qian, H. and Y. Jin. (2016) An updated megaphylogeny of plants, a tool for generating plant phylogenies and an analysis of phylogenetic community structure. Journal of Plant Ecology 9(2): 233–239.
@@ -52,9 +60,14 @@ new.sp.list<-sp.list%>%
 result<-S.PhyloMaker(spList=new.sp.list, tree=phylo, nodes=nodes)# prune megaphy to species list
 phy<-result$Scenario.1%>%makeLabel()
 
+write.tree(phy, 'data/2018/css_phy_raw.tree')
 ```  
 
 #### Intermediate predators : herbivores, IP:H  
+```{r}
+## read in phylogeny
+phy<-read.tree('data/2018/css_phy_raw.tree')
+```
 ```{r}
 # ratio of predators to herbivores by plant species
 ph.df<-oplant%>%group_by(species, treat)%>%summarize(mean=mean(pred_herb, na.rm=TRUE), se=se(pred_herb))
@@ -71,7 +84,9 @@ summary(mod)
 
 Anova(mod, type='III')
 TukeyHSD(mod)
-
+```
+```{r}
+## contrll vs exclusion treatment
 ph.cast<-ph.df%>%dcast(species~treat, value.var='mean')
 ph.cast
 
@@ -83,5 +98,8 @@ ggplot(ph.cast, aes(C, `T`))+
   labs(y='Bird exclusion', x='Control')
 
 
-lm.mod<-lm()
-```
+lm.mod<-lm(`T`~C, data=ph.cast)
+summary(lm.mod)
+```  
+
+
