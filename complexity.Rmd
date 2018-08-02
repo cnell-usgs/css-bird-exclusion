@@ -27,17 +27,16 @@ library(phytools)
 library(ape)
 library(geiger)
 
-se <- function(x) sqrt(var(x,na.rm=TRUE)/length(na.omit(x)))
-```  
-#### Data  
-```{r}
-oplant<-read.csv('data/2018/CSS_plant_data.csv')
+std <- function(x) sd(x)/sqrt(length(x))
 
-# complexity data
-plants<-read.csv('data/2018/CSS_comps.csv')%>%
-  group_by(species)%>%
-  dplyr::summarize(complex=mean(complexity/(3*diameter)), complex_se=se(complexity/(3*diameter)))
-plants
+## plot theme for regressions
+css_theme<-list(theme_minimal(),
+                theme(axis.line = element_line(color='black'),
+                      panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                      legend.position = 'none', 
+                      axis.ticks = element_line(color='black'),
+                      axis.title = element_text(size=9),
+                      axis.text = element_text(size=9)))
 ```  
 
 #### Plant phylogeny  
@@ -61,17 +60,88 @@ result<-S.PhyloMaker(spList=new.sp.list, tree=phylo, nodes=nodes)# prune megaphy
 phy<-result$Scenario.1%>%makeLabel()
 
 write.tree(phy, 'data/2018/css_phy_raw.tree')
+
+#change back names
+new.phy<-phy
+new.phy$tip.label<-ifelse(new.phy$tip.label == 'Artemisia_tridentata', 'Artemisia_californica',
+                     ifelse(new.phy$tip.label == 'Artemisia_ludoviciana', 'Artemisia_douglasiana',paste(new.phy$tip.label)))
+
+write.tree(new.phy, 'data/2018/css_tree.tre')
+
+new.phy.new<-drop.tip(new.phy, tip="Stipa_pulchra")
+
+```  
+```{r}
+## read in phylogeny
+phy<-read.tree('data/2018/css_tree.tre')
+```
+
+#### Data  
+```{r athropod biomass, eval=FALSE, include=FALSE}
+# data frame with a row for each individual arthropod, identified to order and length measured
+sizes<-read.csv('data/2018/CSS_arth_size.csv')
+
+# read in Hodar conversions
+hodar<-read.csv('data/2018/hodar_biomass.csv')%>%dplyr::select(Taxa,Order,a,b)
+#setdiff(sizes$Order, hodar$Order) # all orders needed exist in hodar df
+
+##calculate biomass - Hodar Equation: W=a*BodyLength^b
+sized<-sizes%>%left_join(hodar, by='Order')%>%
+  mutate(biomass = (a*length^b))%>%mutate(feed=tolower(feed))
+
+#write.csv(sized, 'data/2018/CSS_arth_biomass.csv', row.names=FALSE)
+```
+```{r arth density}
+biomass.df<-read.csv('data/2018/CSS_arth_biomass.csv')
+
+#calculate the biomass of herb, pred, omni on each plant, IP:H
+biomass.plant<-biomass.df%>%
+  group_by(species, Sample, treat, feed)%>%
+  summarize(mg = sum(biomass, na.rm=TRUE), abun = length(biomass))%>%
+  mutate(plant_total_mg = ave(mg, Sample, FUN = sum), plant_total_abun = ave(abun, Sample, FUN = sum))%>%
+  melt(id.vars=c('species','Sample','treat','feed','plant_total_mg', 'plant_total_abun'))%>%
+  dcast(species+Sample+treat+plant_total_mg+plant_total_abun~feed+variable)%>%
+  mutate(iph_mg = pred_mg/herb_mg, iph_abun=pred_abun/herb_abun)
+biomass.plant # wide format - col for each trophic mg and abun
+
+#write.csv(biomass.plant, 'data/2018/css_arth_biomass_byplant.csv', row.names=FALSE)
+# 
+
+
+```
+
+```{r}
+allplant<-read.csv('data/2018/CSS_plant_data.csv')
+str(allplant)
+
+#calculate species means + se for both treatments - herb (lrr, resist), pred(lrr), IP:H, 
+allplant%>%dplyr::select(species, sample, treat, comp, arth_mg, herb_mg, pred_mg, arth_mg_dens, herb_mg_dens, pred_mg_dens )
+  melt(id.vars=c('species','sample','treat','plant_g'))%>%
+  group_by(species, treat)%>%
+  summarize(mean=mean(value, na.rm=TRUE), se=se(value))%>%
+  dcast()
+
+# complexity data
+plants<-read.csv('data/2018/CSS_comps.csv')%>%
+  group_by(species)%>%
+  dplyr::summarize(complex=mean(complexity/(3*diameter)), complex_se=se(complexity/(3*diameter)))
+plants
 ```  
 
 #### Intermediate predators : herbivores, IP:H  
 ```{r}
-## read in phylogeny
-phy<-read.tree('data/2018/css_phy_raw.tree')
-```
-```{r}
+## read in data ####
+sp.lrr<-read.csv('data/2018/css_trait_means.csv')%>%
+  dplyr::select(T_mean,species,genus, sp_ep, contains('birdfx'), contains('resist'), contains('hpq'), contains('comp'))%>%
+  mutate(herbs=T_mean, hpq_log=log(hpq+1), hpq_log_se=log(hpq_se+1), resist_log=log(resist+1), resist=resist*-1)
+rownames(sp.lrr)<-sp.lrr$species
+
+# add ratio of predators to herbivores by plant species
+ph.df<-allplant%>%group_by(species, treat)%>%
+  summarize(mean=mean(pred_herb, na.rm=TRUE), se=se(pred_herb))
+
+#######################
 # ratio of predators to herbivores by plant species
-ph.df<-oplant%>%group_by(species, treat)%>%summarize(mean=mean(pred_herb, na.rm=TRUE), se=se(pred_herb))
-ph.df
 
 ggplot(ph.df, aes(treat, mean))+
   geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1)+
@@ -84,6 +154,14 @@ summary(mod)
 
 Anova(mod, type='III')
 TukeyHSD(mod)
+```
+```{r}
+# make species rows and cols for each ph var
+ph.melt<-ph.df%>%melt(id.vars=c('species','treat'))%>%dcast(species~treat+variable)%>%
+  dplyr::select(species, ph_c_mean = C_mean, ph_t_mean=T_mean, ph_c_se = C_se, ph_t_se=T_se)
+
+sp.mean.df<-sp.lrr%>%left_join(ph.melt, by='species')
+
 ```
 ```{r}
 ## contrll vs exclusion treatment
@@ -100,6 +178,12 @@ ggplot(ph.cast, aes(C, `T`))+
 
 lm.mod<-lm(`T`~C, data=ph.cast)
 summary(lm.mod)
+
+## is IP:H related to the bird lrr?
+lm.mod<-lm(`T`~C, data=ph.cast)
+summary(lm.mod)
+
+
 ```  
 
 
