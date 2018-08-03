@@ -53,6 +53,9 @@ sp.lrr<-read.csv('data/2018/css_trait_means.csv')%>%
   mutate(herbs=log(1+T_mean), hpq_log=log(hpq+1), hpq_log_se=log(hpq_se+1), resist_log=log(resist+1), resist=resist*-1)
 rownames(sp.lrr)<-sp.lrr$species
 #write.csv(sp.lrr, 'CSS_sp_lrr_all.csv')
+#write.csv(sp.lrr, 'R/css-bird-exclusion/data/ms/css_trait_means_figs_check.csv')
+
+
 
 sp.lrr
 exp(mean(sp.lrr$birdfx))

@@ -50,7 +50,7 @@ phylo<-read.tree("data/trees/QianJin_2016.txt") # megaphylogeny from Qian & Jim 
 nodes<-read.table('https://raw.githubusercontent.com/jinyizju/S.PhyloMaker/master/nodes', fill=TRUE, header=TRUE)# nodes for phylogeny
 
 sp.list<-read.csv('data/2018/css_taxa.csv')%>%
-  dplyr::select(species, genus, family)
+  dplyr::select(species, genus, family, code)
 
 # artemisia species are not in megaphy, use representative taxa from subgenera for divergence
 new.sp.list<-sp.list%>%
@@ -69,11 +69,12 @@ new.phy$tip.label<-ifelse(new.phy$tip.label == 'Artemisia_tridentata', 'Artemisi
 write.tree(new.phy, 'data/2018/css_tree.tre')
 
 new.phy.new<-drop.tip(new.phy, tip="Stipa_pulchra")
+write.tree(new.phy.new, 'data/2018/css_tree_clean.tre')
 
 ```  
 ```{r}
 ## read in phylogeny
-phy<-read.tree('data/2018/css_tree.tre')
+phy<-read.tree('data/2018/css_tree_clean.tre')
 ```
 
 #### Data  
@@ -129,6 +130,7 @@ allplants<-read.csv('data/ms/css_arth_comp.csv')
 all.sps.treat<-allplants%>%dplyr::select(species, sample, treat,
                         omni_mg_dens, herb_mg_dens, pred_mg_dens, plant_total_mg_dens, 
                         iph_mg_omni, iph_abun_omni, iph_mg, iph_abun)%>%
+  mutate(herb_omni_mg_dens = herb_mg_dens+omni_mg_dens)%>%
   melt(id.vars=c('species','sample','treat'))%>%
   group_by(species, treat, variable)%>%
   summarize(mean=mean(value, na.rm=TRUE), se=se(value), sd=sd(value, na.rm=TRUE), n=length(value))%>%
@@ -163,35 +165,207 @@ ggplot(lrr.all, aes(variable, yi))+
 Create master dataframe 
 ```{r}
 lrr.all<-read.csv('data/ms/css_all_sps_data.csv') # lrr data - needs work to combine with other species level data
-lrr.sps<-lrr.all%>%dplyr::select(species,variable, yi, sei)%>%
+lrr.sps<-lrr.all%>%dplyr::select(species,variable, yi, sei, T_mean, T_se, C_mean, C_se)%>%
   melt(id.vars=c('species','variable'), variable.name='metric')%>%
   dcast(species~variable+metric)
 
 sps.means<-read.csv('data/ms/css_treat_means.csv') #sps means for each treatment
-sps.means
+str(sps.means)
 
 # sps means for all plants (complexity)...anything else?
 allplants_mean<-allplants%>%
   group_by(species)%>%
   summarize(stem_mean=mean(stem_density), stem_se = se(stem_density))%>%
-  left_join(sps.means, by='species')%>%
   left_join(lrr.sps, by='species')
 
 write.csv(allplants_mean, 'data/ms/css_allplants_means.csv', row.names=FALSE)
 str(allplants_mean)
 #combine all 3, thinka bout which are important, run tests 
-```  
 
-Test for effect of plant species * treatment  
+
+### plots
+xvar<-allplants_mean$stem_mean
+yvar<-allplants_mean$herb_omni_mg_dens_yi
+ggplot(allplants_mean, aes(reorder(species, yvar), yvar))+
+  geom_errorbar(aes(ymin=yvar-herb_omni_mg_dens_sei, ymax=yvar+herb_omni_mg_dens_sei), width=0, color='darkgrey', size=1.2)+
+  geom_point(shape=25, size=2.5, fill='white', stroke=1)+
+  geom_hline(yintercept=0, lty='dotted')+
+  css_theme+
+  theme(axis.text.x=element_text(angle=90, size=14, hjust=.95, vjust=.5, face='italic'))+
+  labs(x='', y='Indirect defense from birds')
+
+sp.lrr<-read.csv('data/2018/css_trait_means.csv')%>%
+  left_join(allplants_mean, by='species')
+str(sp.lrr)
+
+sp.final<-sp.lrr%>%dplyr::select(species, birdfx, birdfx_se,
+                       resist, resist_se, 
+                       stem_mean, stem_se, 
+                       iph_mg = iph_mg_omni_T_mean,iph_mg_se = iph_mg_omni_T_se,
+                       iph_abun = iph_abun_omni_T_mean,iph_abun_se = iph_abun_omni_T_se,
+                       lrr_iph_abun = iph_abun_omni_yi, lrr_iph_abun_se = iph_abun_omni_sei,
+                       lrr_iph_mg = iph_mg_omni_yi, lrr_iph_mg_se = iph_mg_omni_sei)
+
+plot(sp.final%>%dplyr::select(birdfx, resist, stem_mean, iph_mg, iph_abun, lrr_iph_abun, lrr_iph_mg))
+
+write.csv(sp.final, 'data/ms/css_means_need_check.csv', row.names=FALSE)
+```  
 
 ```{r}
 str(allplants_mean)
 plot(allplants_mean%>%
-       dplyr::select(stem_mean, resist = T_herb_mg_dens_mean, 
-                     lrr_herb = herb_mg_dens_yi, lrr_pred = pred_mg_dens_yi,
-                     iph_t = T_iph_mg_omni_mean, iph_c = C_iph_mg_omni_mean, 
-                     lrr_iph = iph_mg_omni_yi, lrr_iph_abun = iph_abun_omni_yi))
+       dplyr::select(stem_mean, resist = herb_omni_mg_dens_T_mean, 
+                     lrr_herb = herb_omni_mg_dens_yi, lrr_pred = pred_mg_dens_yi,
+                     iph_t_mg = iph_mg_omni_T_mean, iph_c_mg = iph_mg_omni_C_mean, 
+                     lrr_iph = iph_mg_omni_yi, lrr_iph_abun = iph_abun_omni_yi,
+                     iph_t_abun = iph_abun_omni_T_mean, iph_c_abun = iph_abun_omni_C_mean,
+                     ))
 
+
+```
+```{r master df}
+# lrr_herb, lrr_pred, resist = herb_mg_dens, complexity, iph, lrr_iph
+
+df<-allplants_mean%>%
+       dplyr::select(sps = species, stem_mean, resist = herb_omni_mg_dens_T_mean, resist_se=herb_omni_mg_dens_T_se,
+                     lrr_herb = herb_omni_mg_dens_yi, lrr_pred = pred_mg_dens_yi,
+                     lrr_herb_se = herb_mg_dens_sei, lrr_pred_se = pred_mg_dens_sei, everything())%>%
+  left_join(sp.list, by=c('sps'='code'))%>%
+  mutate(sps_phy = gsub(' ', '_', species), lrr_herb=lrr_herb*-1, lrr_pred=lrr_pred*-1)%>%
+  data.frame()
+df%>%dplyr::select(sps, stem_mean, resist, lrr_herb)
+
+
+```
+
+
+```{r}
+# PIC 
+library(caper)
+
+phy.05<-compute.brlen(phy, power=0.5) # branch length adjustment for PIC
+str(df)
+
+css.phy<-comparative.data(phy.05, df, names.col="sps_phy", na.omit=TRUE, vcv=TRUE)
+#contains phylogeny, data for PIC 
+```
+```{r compelxity tests}
+
+#complexity vs the world
+
+# lrr_herb
+comp_lrr_herb<-crunch(lrr_herb~stem_mean, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+comp_lrr_herb #
+pic.comp.lrr.herb<-caic.table(comp_lrr_herb)
+caic.diagnostics(comp_lrr_herb, plot=FALSE)
+
+# lrr_pred
+comp_lrr_pred<-crunch(lrr_pred~stem_mean, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+comp_lrr_pred
+pic.comp.lrr.pred<-caic.table(comp_lrr_pred)
+caic.diagnostics(comp_lrr_pred, plot=FALSE)
+
+# lrr_iph_mg
+comp_lrr_iph_mg<-crunch(lrr_iph_mg~stem_mean, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+comp_lrr_iph_mg
+pic.comp.lrr.iph.mg<-caic.table(comp_lrr_iph_mg)
+caic.diagnostics(comp_lrr_iph_mg, plot=FALSE)
+
+# lrr_iph_abun
+comp_lrr_iph_abun<-crunch(lrr_iph_abun~stem_mean, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+comp_lrr_iph_abun
+pic.comp.lrr.iph.abun<-caic.table(comp_lrr_iph_abun)
+caic.diagnostics(comp_lrr_iph_mg, plot=FALSE)
+
+# pred_mg_dens - predator density in bird exclusion
+lmmod<-lm(T_pred_mg_dens_mean~stem_mean, css.phy$data)
+summary(lmmod)
+comp_pred_mg_dens<-crunch(T_pred_mg_dens_mean~stem_mean, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+comp_pred_mg_dens #
+pic.comp.pred.mg<-caic.table(comp_pred_mg_dens)
+caic.diagnostics(comp_pred_mg_dens, plot=FALSE)
+
+ggplot(pic.comp.pred.mg, aes(stem_mean, T_pred_mg_dens_mean))+geom_point()+geom_smooth(method='lm', se=FALSE)
+# predator density is related to complexity - lower with higher complexity
+
+# herb_mg_dens - herbivore density in bird exclusion (reisst)
+lmmod<-lm(resist~log(stem_mean), css.phy$data)
+summary(lmmod)
+shapiro.test(resid(lmmod))
+
+comp_herb_mg_dens<-crunch(resist~stem_mean, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+comp_herb_mg_dens #
+pic.comp.herb.mg<-caic.table(comp_herb_mg_dens)
+caic.diagnostics(comp_herb_mg_dens, plot=FALSE)
+# herbivore density is NOT related to complexity - 
+# so complexity increases IP, but not H  
+
+# iph_t_mg_dens - IP:H in bird exclusion
+lmmod<-lm(T_iph_abun_mean~log(stem_mean), css.phy$data)
+summary(lmmod)
+shapiro.test(resid(lmmod))
+comp_iph_t_mg<-crunch(T_iph_abun_mean~stem_mean, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+comp_iph_t_mg
+pic.comp.iph.t.mg<-caic.table(comp_iph_t_mg)
+caic.diagnostics(comp_iph_t_mg, plot=FALSE)
+
+
+# bird fx and reist
+lmmod<-lm(lrr_herb~resist, css.phy$data)
+summary(lmmod)
+shapiro.test(resid(lmmod))
+
+lrrherb_resist<-crunch(lrr_herb~resist, css.phy, stand.contr=TRUE, equal.branch.length=FALSE)
+lrrherb_resist
+caic.df<-caic.table(lrrherb_resist)
+lmmod<-lm(lrr_herb~resist, caic.df)
+summary(lmmod)
+
+
+caic.diagnostics(lrrherb_resist, plot=FALSE)
+
+
+
+```  
+
+
+```{r}
+sps.id<-ggplot(df, aes(reorder(species, lrr_herb), lrr_herb))+
+  geom_errorbar(aes(ymin=lrr_herb-lrr_herb_se, ymax=lrr_herb+lrr_herb_se), width=0, color='darkgrey', size=1.2)+
+  geom_point(shape=25, size=2.5, fill='white', stroke=1)+
+  geom_hline(yintercept=0, lty='dotted')+
+  css_theme+
+  theme(axis.text.x=element_text(angle=90, size=14, hjust=.95, vjust=.5, face='italic'))+
+  labs(x='', y='Indirect defense from birds')
+sps.id
+
+
+ggplot(df, aes(resist, lrr_herb))+
+  geom_errorbar(aes(ymin=lrr_herb-lrr_herb_se, ymax=lrr_herb+lrr_herb_se), width=0, color='darkgrey', size=1.2)+
+  geom_point(shape=25, size=2.5, fill='white', stroke=1)+
+  geom_hline(yintercept=0, lty='dotted')+
+  css_theme+
+  theme(axis.text.x=element_text(angle=90, size=14, hjust=.95, vjust=.5, face='italic'))+
+  labs(x='Direct resistance', y='Indirect defense from birds')+
+  geom_smooth(method='lm', se=FALSE, color='grey40', lty='solid')+
+  geom_errorbarh(aes(xmin=resist-resist_se, xmax=resist+resist_se), height=0, color='darkgrey', size=1, alpha=.7)+
+  scale_x_reverse()+
+  css_theme
+
+```
+
+Raw correlations between traits and defense  
+```{r}
+sp.lrr<-df
+raw.cor<-rbind(tidy(cor.test(sp.lrr$lrr_herb, sp.lrr$resist))%>%mutate(yvar = 'birdfx', xvar = 'resist'),
+               tidy(cor.test(sp.lrr$lrr_herb, sp.lrr$lrr_pred))%>%mutate(yvar = 'birdfx', xvar = 'hpq_log'),
+               tidy(cor.test(sp.lrr$resist, sp.lrr$iph_))%>%mutate(yvar = 'resist', xvar = 'hpq_log'),
+               tidy(cor.test(sp.lrr$lrr_herb, sp.lrr$complex))%>%mutate(yvar = 'birdfx', xvar = 'comp'),
+               tidy(cor.test(sp.lrr$resist, sp.lrr$complex))%>%mutate(yvar = 'resist', xvar = 'comp'),
+               tidy(cor.test(sp.lrr$lrr_pred, sp.lrr$complex))%>%mutate(yvar = 'lrr_pred', xvar = 'comp'),
+               tidy(cor.test(sp.lrr$iph, sp.lrr$lrr_pred))%>%mutate(yvar = 'predherb', xvar = 'lrr_pred'),
+               tidy(cor.test(sp.lrr$lrr_iph, sp.lrr$complex))%>%mutate(yvar = 'predherb', xvar = 'comp'))%>%
+  mutate(model='raw', p.one.tail = p.value/2)
 
 ```
 
