@@ -162,9 +162,35 @@ ggplot(lrr.all, aes(variable, yi))+
 ```
 Create master dataframe 
 ```{r}
-lrr.all<-read.csv('data/ms/css_all_sps_data.csv') # lrr data
+lrr.all<-read.csv('data/ms/css_all_sps_data.csv') # lrr data - needs work to combine with other species level data
+lrr.sps<-lrr.all%>%dplyr::select(species,variable, yi, sei)%>%
+  melt(id.vars=c('species','variable'), variable.name='metric')%>%
+  dcast(species~variable+metric)
+
 sps.means<-read.csv('data/ms/css_treat_means.csv') #sps means for each treatment
-# sps means for all plants (complexity)
+sps.means
+
+# sps means for all plants (complexity)...anything else?
+allplants_mean<-allplants%>%
+  group_by(species)%>%
+  summarize(stem_mean=mean(stem_density), stem_se = se(stem_density))%>%
+  left_join(sps.means, by='species')%>%
+  left_join(lrr.sps, by='species')
+
+write.csv(allplants_mean, 'data/ms/css_allplants_means.csv', row.names=FALSE)
+str(allplants_mean)
+#combine all 3, thinka bout which are important, run tests 
+```  
+
+Test for effect of plant species * treatment  
+
+```{r}
+str(allplants_mean)
+plot(allplants_mean%>%
+       dplyr::select(stem_mean, resist = T_herb_mg_dens_mean, 
+                     lrr_herb = herb_mg_dens_yi, lrr_pred = pred_mg_dens_yi,
+                     iph_t = T_iph_mg_omni_mean, iph_c = C_iph_mg_omni_mean, 
+                     lrr_iph = iph_mg_omni_yi, lrr_iph_abun = iph_abun_omni_yi))
 
 
 ```
