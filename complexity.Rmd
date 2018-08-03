@@ -122,22 +122,52 @@ write.csv(allplants, 'data/ms/css_arth_comp.csv', row.names=FALSE)
 ```
 
 ```{r sps means both treats}
+# plant-level dataframe
 allplants<-read.csv('data/ms/css_arth_comp.csv')
 
-
-
-
-allplant<-read.csv('data/2018/CSS_plant_data.csv')
-str(allplant)
-
 #calculate species means + se for both treatments - herb (lrr, resist), pred(lrr), IP:H, 
-allplant%>%dplyr::select(species, sample, treat, comp, arth_mg, herb_mg, pred_mg, arth_mg_dens, herb_mg_dens, pred_mg_dens)
-  melt(id.vars=c('species','sample','treat','plant_g'))%>%
-  group_by(species, treat)%>%
-  summarize(mean=mean(value, na.rm=TRUE), se=se(value))%>%
-  dcast()
+all.sps.treat<-allplants%>%dplyr::select(species, sample, treat,
+                        omni_mg_dens, herb_mg_dens, pred_mg_dens, plant_total_mg_dens, 
+                        iph_mg_omni, iph_abun_omni, iph_mg, iph_abun)%>%
+  melt(id.vars=c('species','sample','treat'))%>%
+  group_by(species, treat, variable)%>%
+  summarize(mean=mean(value, na.rm=TRUE), se=se(value), sd=sd(value, na.rm=TRUE), n=length(value))%>%
+  melt(id.vars=c('species','treat','variable'), variable.name='metric')%>%
+  dcast(species+variable~treat+metric)
+all.sps.treat
+
+write.csv(all.sps.treat, 'data/ms/css_treat_means.csv', row.names=FALSE)
 
 ```  
+
+Measure the effect of bird predators as the log response ratio  
+```{r calc lrr bird}
+##LRR bird effect 
+# group1 = control .... so if negative means that birds reduced 
+library(metafor)
+
+lrr.all<-summary(escalc('ROM', m1i=C_mean, m2i = T_mean, sd1i =C_sd , sd2i = T_sd, n1i= C_n, n2i =T_n , data=all.sps.treat))
+
+write.csv(lrr.all, 'data/ms/css_all_sps_data.csv', row.names=FALSE)
+```
+```{r}
+# plot all LRRs for each species, variable
+
+ggplot(lrr.all, aes(variable, yi))+
+  geom_errorbar(aes(ymin=yi-sei, ymax=yi+sei), width=0)+
+  geom_point(aes(color=species))+
+  geom_hline(yintercept=0, lty='dashed')+
+  theme(axis.text.x=element_text(angle=90))
+
+```
+Create master dataframe 
+```{r}
+lrr.all<-read.csv('data/ms/css_all_sps_data.csv') # lrr data
+sps.means<-read.csv('data/ms/css_treat_means.csv') #sps means for each treatment
+# sps means for all plants (complexity)
+
+
+```
 
 #### Intermediate predators : herbivores, IP:H  
 ```{r}
