@@ -77,6 +77,8 @@ phy<-read.tree('data/2018/css_tree.tre')
 ```
 
 #### Data  
+
+Use arthropod length to estimate arthropod biomass  
 ```{r athropod biomass, eval=FALSE, include=FALSE}
 # data frame with a row for each individual arthropod, identified to order and length measured
 sizes<-read.csv('data/2018/CSS_arth_size.csv')
@@ -90,8 +92,10 @@ sized<-sizes%>%left_join(hodar, by='Order')%>%
   mutate(biomass = (a*length^b))%>%mutate(feed=tolower(feed))
 
 #write.csv(sized, 'data/2018/CSS_arth_biomass.csv', row.names=FALSE)
-```
-```{r arth density}
+```  
+
+Determine arthropod biomass by trophic group for each individual plant  
+```{r arth density, eval=FALSE, include=FALSE}
 biomass.df<-read.csv('data/2018/CSS_arth_biomass.csv')
 
 #calculate the biomass of herb, pred, omni on each plant, IP:H
@@ -100,32 +104,39 @@ biomass.plant<-biomass.df%>%
   summarize(mg = sum(biomass, na.rm=TRUE), abun = length(biomass))%>%
   mutate(plant_total_mg = ave(mg, Sample, FUN = sum), plant_total_abun = ave(abun, Sample, FUN = sum))%>%
   melt(id.vars=c('species','Sample','treat','feed','plant_total_mg', 'plant_total_abun'))%>%
-  dcast(species+Sample+treat+plant_total_mg+plant_total_abun~feed+variable)%>%
-  mutate(iph_mg = pred_mg/herb_mg, iph_abun=pred_abun/herb_abun)
+  dcast(species+Sample+treat+plant_total_mg+plant_total_abun~feed+variable, fill=0)%>%
+  mutate(iph_mg = pred_mg/herb_mg, iph_abun=pred_abun/herb_abun, 
+         iph_mg_omni=pred_mg/(omni_mg+herb_mg), iph_abun_omni=pred_abun/(omni_abun+herb_abun))
 biomass.plant # wide format - col for each trophic mg and abun
 
-#write.csv(biomass.plant, 'data/2018/css_arth_biomass_byplant.csv', row.names=FALSE)
-# 
+write.csv(biomass.plant, 'data/ms/css_arth_biomass_byplant.csv', row.names=FALSE)
 
+## combine with complexity data
+allplant<-read.csv('data/ms/css_plant_all.csv')
+allplants<-allplant%>%left_join(biomass.plant, by=c('species','sample'='Sample', 'treat'))%>%
+  mutate_at(vars(plant_total_mg:pred_abun), funs(dens=./plant_g))
+allplants
 
+write.csv(allplants, 'data/ms/css_arth_comp.csv', row.names=FALSE)
+#just need the LRR bird effect on herb_mg_dens, pred_mg_dens
 ```
 
-```{r}
+```{r sps means both treats}
+allplants<-read.csv('data/ms/css_arth_comp.csv')
+
+
+
+
 allplant<-read.csv('data/2018/CSS_plant_data.csv')
 str(allplant)
 
 #calculate species means + se for both treatments - herb (lrr, resist), pred(lrr), IP:H, 
-allplant%>%dplyr::select(species, sample, treat, comp, arth_mg, herb_mg, pred_mg, arth_mg_dens, herb_mg_dens, pred_mg_dens )
+allplant%>%dplyr::select(species, sample, treat, comp, arth_mg, herb_mg, pred_mg, arth_mg_dens, herb_mg_dens, pred_mg_dens)
   melt(id.vars=c('species','sample','treat','plant_g'))%>%
   group_by(species, treat)%>%
   summarize(mean=mean(value, na.rm=TRUE), se=se(value))%>%
   dcast()
 
-# complexity data
-plants<-read.csv('data/2018/CSS_comps.csv')%>%
-  group_by(species)%>%
-  dplyr::summarize(complex=mean(complexity/(3*diameter)), complex_se=se(complexity/(3*diameter)))
-plants
 ```  
 
 #### Intermediate predators : herbivores, IP:H  
