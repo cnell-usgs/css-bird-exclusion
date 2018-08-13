@@ -115,11 +115,93 @@ write.csv(biomass.plant, 'data/ms/css_arth_biomass_byplant.csv', row.names=FALSE
 ## combine with complexity data
 allplant<-read.csv('data/ms/css_plant_all.csv')
 allplants<-allplant%>%left_join(biomass.plant, by=c('species','sample'='Sample', 'treat'))%>%
-  mutate_at(vars(plant_total_mg:pred_abun), funs(dens=./plant_g))
+  mutate_at(vars(plant_total_mg:pred_abun), funs(dens=./plant_g)) # calculate densities
 allplants
 
 write.csv(allplants, 'data/ms/css_arth_comp.csv', row.names=FALSE)
 #just need the LRR bird effect on herb_mg_dens, pred_mg_dens
+```
+Look at arthropod communities  
+```{r}
+biomass.df<-read.csv('data/2018/CSS_arth_biomass.csv')
+
+
+## how does arthropod community composition & biomass differ with treatment, species, complexity?
+str(biomass.df)
+
+# make wide
+mg.df<-biomass.df%>%
+  dplyr::select(species, Sample, treat, Order, biomass)%>%
+  group_by(species, treat, Sample, Order)%>%
+  summarize(mg=sum(biomass, na.rm=TRUE))%>%
+  dcast(species+treat+Sample~Order)%>%
+  mutate(samp=paste0(species, treat))%>%
+  dplyr::select(species, Sample, samp, treat, everything())
+
+mg.df[is.na(mg.df)]<-0
+
+mg.dist<-vegdist(mg.df[,-1:-4], method='bray')
+
+mg.ad<-adonis(mg.dist~treat*species, data=mg.df, permutations=1000)
+mg.ad
+# composition differs with treatment and species
+
+mg.mds<-metaMDS(mg.dist)
+# does not converge
+
+
+# try other
+# 
+mg.cap<-capscale(mg.dist~1, comm=mg.df[,-1:-3])
+mg.cap<-capscale(mg.df[,-1:-4]~treat+ARAN+COLE+Condition(species), comm=mg.df[,-1:-4], data=mg.df)
+head(summary(mg.cap))
+```
+```{r}
+#str(mg.cap)
+cap.sp<-data.frame(scores(mg.cap)$species)
+cap.sp$sps<-rownames(cap.sp)
+cap.good<-cap.sp%>%filter(sps %in% c('COLE','ARAN','HETE','HYME','THYS','AUCH'))
+
+cap.site<-data.frame(scores(mg.cap)$centroids)#%>%cbind(mg.df[,1:3])
+
+ggplot()+
+  geom_text(data=cap.site, aes(x=CAP1, y=CAP2, label=rownames(cap.site)), size=2)+
+  geom_text(data=cap.good, aes(x=CAP1, y=CAP2, label=sps))+
+  theme_bw()
+
+## need species centroids and treatment centroids - or centroids for each species * treat
+
+str(mg.cap)
+mg.cap$CCA$centroids
+scores(mg.cap)
+```
+
+```{r}
+cpa.env<-envfit(mg.cap, env=mg.df)
+# aran auch, cole, hete, hyme, thys
+# treat, sps
+
+str(cpa.env)
+
+str(cpa.env$factors)
+
+cent<-data.frame(cpa.env$factors$centroids)
+str(cent)
+cent$fact<-rownames(cent)  
+str(cent)  
+centgood<-cent%>%filter(fact %in% c('speciesACRA','speciesARDO','speciesENCA','speciesERFA','speciesERPA','speciesLUAL','speciesSAAP','speciesSAME','speciesISME','treatC','treatT'))
+
+
+ggplot()+
+  geom_text(data=centgood, aes(x=MDS1, y=MDS2, label=fact), size=2)+
+  geom_text(data=cap.good, aes(x=MDS1*.2, y=MDS2*.2, label=sps))+
+  theme_bw()
+
+## add on bird effect as relates to community comp?
+mg.cap.c<-capscale(mg.df[,-1:-3]~treat*species, comm=mg.df[,-1:-3], data=mg.df)
+summary(mg.cap.c)
+
+?capscale
 ```
 
 ```{r sps means both treats}
